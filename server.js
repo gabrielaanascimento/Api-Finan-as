@@ -3,23 +3,49 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config(); // Carrega as variáveis de ambiente do arquivo .env
 
 const app = express();
 
-const PORT = process.env.API_PORT || 3000;
+const PORT = process.env.API_PORT || 4000; // Alterado para 4000, como está no frontend
+const API_SECRET_KEY = process.env.API_SECRET_KEY; // A chave secreta do seu .env
+
+// Verifica se a chave secreta foi configurada
+if (!API_SECRET_KEY) {
+    console.error('ERRO: A variável de ambiente API_SECRET_KEY não está definida. A autenticação não funcionará.');
+    process.exit(1); // Encerra o processo se a chave não estiver configurada
+}
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });
 
-app.use(cors());
+app.use(cors()); // Habilita CORS para todas as rotas
+app.use(express.json()); // Habilita o parsing de JSON no corpo das requisições
 
-app.use(express.json());
+// Middleware de autenticação
+const authenticateApiKey = (req, res, next) => {
+    const apiKey = req.headers['x-api-key']; // Pega a chave do cabeçalho 'X-API-Key'
 
+    if (!apiKey) {
+        return res.status(401).json({ error: 'Acesso negado. Chave de API não fornecida.' });
+    }
+
+    if (apiKey !== API_SECRET_KEY) {
+        return res.status(403).json({ error: 'Acesso negado. Chave de API inválida.' });
+    }
+
+    next(); // Se a chave for válida, continua para a próxima função middleware/rota
+};
+
+// Rota de status (não requer autenticação)
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'API de Finanças está online!' });
 });
+
+// Aplica o middleware de autenticação a todas as rotas abaixo
+// Você pode aplicar individualmente ou a grupos de rotas se preferir
+app.use(authenticateApiKey);
 
 app.get('/transacoes', async (req, res) => {
     try {
@@ -106,7 +132,7 @@ app.delete('/transacoes/:id', async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Transação não encontrada para exclusão.' });
         }
-        res.status(204).send();
+        res.status(204).send(); // 204 No Content para exclusão bem-sucedida
     } catch (err) {
         console.error(`Erro ao excluir transação com ID ${id}:`, err);
         res.status(500).json({ error: 'Erro interno do servidor ao excluir transação.' });
@@ -137,8 +163,8 @@ app.get('/totalSaida', async (req, res) => {
         `);
         res.status(200).json(result.rows[0]);
     } catch (err) {
-        console.error('Erro ao calcular saldo:', err);
-        res.status(500).json({ error: 'Erro interno do servidor ao calcular saldo.' });
+        console.error('Erro ao calcular total de saída:', err);
+        res.status(500).json({ error: 'Erro interno do servidor ao calcular total de saída.' });
     }
 });
 
@@ -151,8 +177,8 @@ app.get('/totalEntrada', async (req, res) => {
         `);
         res.status(200).json(result.rows[0]);
     } catch (err) {
-        console.error('Erro ao calcular saldo:', err);
-        res.status(500).json({ error: 'Erro interno do servidor ao calcular saldo.' });
+        console.error('Erro ao calcular total de entrada:', err);
+        res.status(500).json({ error: 'Erro interno do servidor ao calcular total de entrada.' });
     }
 });
 
